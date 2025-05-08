@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <iostream>
 #include "common.h"
 #include "ClientConnection.h"
@@ -96,7 +97,7 @@ void ClientConnection::WaitForRequests() {
         int h1, h2, h3, h4, p1, p2;
         fscanf(control_fd, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2);
         uint32_t address = h4 << 24 | h3 << 16 | h2 << 8 | h1;
-        uint16_t port = p2 << 8 | p1;
+        uint16_t port = p1 << 8 | p2;
         data_socket = connect_TCP(address, port);
         if (data_socket < 0) {
             fprintf(control_fd, "501 PORT Syntax error in parameters or arguments.\n");
@@ -113,7 +114,24 @@ void ClientConnection::WaitForRequests() {
           fprintf(control_fd, "125 Data connection already open; transfer starting.\n");
           fflush(control_fd);
 
-          DIR *directory = opendir(".");
+          DIR *directory = opendir(get_current_dir_name());
+          struct dirent *directory_element;
+          char buffer[MAX_BUFF];
+          size_t size;
+
+          if (directory != NULL) {
+            while ((directory_element = readdir(directory)) != NULL) {
+               size = sprintf(buffer, "%s\n", directory_element->d_name);
+               send(data_socket, buffer, size, 0);
+               }
+            } else {
+               fprintf(control_fd, "450 Can't open directory.\n");
+               close(data_socket);
+            }
+            fprintf(control_fd, "250 Transfer complete.\n");
+            fflush(control_fd);
+            closedir(directory);
+            close(data_socket);
       } else if (COMMAND("SYST")) {
          fprintf(control_fd, "215 UNIX Type: L8.\n");
       } else if (COMMAND("TYPE")) {
